@@ -170,7 +170,7 @@ class ParseForest {
       return this.flatten_memo;
     }
     if (this.children.length === 0){
-      return [{children: [], data: this.data, start: this.start, end: this.start+1}];
+      return [{children: [], data: this.data, num_imagined: (this.start === -1)? 1: 0, start: this.start, end: this.start+1}];
     }
     let child_forests: ParseTree[][] = [];
     for (let i = 0; i < this.children.length; i++){
@@ -196,13 +196,19 @@ class ParseForest {
     }
     let ret: ParseTree[] = [];
     let next_ret: ParseTree[] = [];
-    ret.push({children: [], data: this.data, start: this.start, end: this.start})
+    ret.push({children: [], data: this.data, num_imagined: 0, start: this.start, end: this.start})
     for (let i = 0; i < this.children.length; i++){
       for (const ret_tree of ret){
         for (const tree of child_forests[i]){
           if (tree.start === ret_tree.end || tree.start === -1){
             let next_end = (tree.start === -1)? ret_tree.end : tree.end;
-            next_ret.push({children: ret_tree.children.concat([tree]), data: this.data, start: this.start, end: next_end});
+            next_ret.push({
+              children: ret_tree.children.concat([tree]), 
+              num_imagined: ret_tree.num_imagined+tree.num_imagined, 
+              data: this.data, 
+              start: this.start, 
+              end: next_end
+            });
           }
         }
       }
@@ -227,9 +233,22 @@ class ParseForest {
       return has_conversion(scc,s);
     }
 
+    let min_imagined: {[key: number]: number} = {};
+    for (const tree of ret) {
+      const current = min_imagined[tree.end];
+      if ((current === undefined) || current > tree.num_imagined) {
+        min_imagined[tree.end] = tree.num_imagined;
+      }
+    }
+
+    console.log(min_imagined);
+
+
     function filter(t: ParseTree) {
       if (t.end === t.start) return false;
       if (has_conversion(t,t.data)) return false;
+      if (t.num_imagined > min_imagined[t.end]) return false;
+
       //TODO maybe restrict parses to left most here?
       return true;
     }
@@ -240,6 +259,7 @@ class ParseForest {
     if (DEBUG)
     for (const tree of ret) {
       console.log(ptree_str(tree, indent + "\t"));
+      console.log(tree.end, tree.num_imagined);
     }
 
 
@@ -252,6 +272,7 @@ class ParseForest {
 type ParseTree = {
   children: ParseTree[];
   data: Symbol;
+  num_imagined: number;
   start: number;
   end: number;
 }
