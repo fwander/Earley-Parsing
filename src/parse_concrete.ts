@@ -75,16 +75,16 @@ enum Symbol {
 const grammar: Rule[][] = [
   [ //S
     {lhs: Symbol.S, rhs: [Symbol.A]},
-    {lhs: Symbol.S, rhs: [Symbol.A, Symbol.A]},
   ], 
   [ //A
-    {lhs: Symbol.A, rhs: [Symbol.a]},
-    {lhs: Symbol.A, rhs: [Symbol.a, Symbol.a]},
+    {lhs: Symbol.A, rhs: [Symbol.B]},
+    {lhs: Symbol.A, rhs: [Symbol.C]},
   ],
   [ //B
-    {lhs: Symbol.B, rhs: [Symbol.b]},
+    {lhs: Symbol.B, rhs: [Symbol.A, Symbol.b, Symbol.A]},
   ],
   [ //C
+    {lhs: Symbol.C, rhs: [Symbol.a]},
     {lhs: Symbol.C, rhs: [Symbol.c]},
   ],
 ]
@@ -159,10 +159,13 @@ class ParseForest {
   }
 
   flatten(indent: string = "", edge_context: Map<ParseForest,Map<ParseForest, number>> = new Map()): ParseTree[] {
+    if (DEBUG)
     console.log(indent + "flattening: " + Symbol[this.data] + "." + this.id + (this.start === -1 ? "?" : ""));
     if (this.flatten_memo.length !== 0) {
-      for (const tree of this.flatten_memo) {
-        console.log(ptree_str(tree, indent+"\t"));
+      if (DEBUG){
+        for (const tree of this.flatten_memo) {
+          console.log(ptree_str(tree, indent+"\t"));
+        }
       }
       return this.flatten_memo;
     }
@@ -171,7 +174,8 @@ class ParseForest {
     }
     let child_forests: ParseTree[][] = [];
     for (let i = 0; i < this.children.length; i++){
-      console.log(indent + "\t" + i.toString());
+      if (DEBUG)
+        console.log(indent + "\t" + i.toString());
       child_forests[i] = [];
       for (const child_forest of this.children[i]) {
         if (edge_context.get(this)?.get(child_forest[0]) !== child_forest[1]) {
@@ -185,7 +189,7 @@ class ParseForest {
           child_forests[i].push(...child_forest[0].flatten(indent + "\t", edge_context));
           map.set(child_forest[0],(map.get(child_forest[0]) ?? 0) - 1);
         }
-        else {
+        else if (DEBUG){
           console.log(indent + "\tskipped:" + Symbol[child_forest[0].data] + "." + child_forest[0].id);
         }
       }
@@ -204,11 +208,40 @@ class ParseForest {
       }
       ret = next_ret.filter((t)=>t.children.length === i+1);
     }
-    ret = ret.filter((t)=>t.end !== t.start);
+    function has_conversion(t: ParseTree, s: Symbol) : boolean{
+      let scc = undefined; //single concrete child
+      for (const child of t.children) {
+        if (child.start !== -1) {
+          if (scc !== undefined) { //not a conversion
+            return false;
+          }
+          scc = child;
+        }
+      }
+      if (scc === undefined) {
+        return false;
+      }
+      if (scc.data === s) {
+        return true;
+      }
+      return has_conversion(scc,s);
+    }
 
+    function filter(t: ParseTree) {
+      if (t.end === t.start) return false;
+      if (has_conversion(t,t.data)) return false;
+      //TODO maybe restrict parses to left most here?
+      return true;
+    }
+
+
+    ret = ret.filter(filter);
+
+    if (DEBUG)
     for (const tree of ret) {
       console.log(ptree_str(tree, indent + "\t"));
     }
+
 
     
     this.flatten_memo = ret.map((x)=>x);
@@ -330,7 +363,7 @@ export function parse(stream: Symbol[]){
         console.log(item_str(item));
     }
   }
-  if (DEBUG) {
+  //if (DEBUG) {
     for (const item of state_sets[0].to_array()){
       if(item.rule.lhs === grammar_start && item.dot === 0){
         let parses = item.forest.flatten();
@@ -342,7 +375,7 @@ export function parse(stream: Symbol[]){
         }
       }
     }
-  }
+  //}
 };
 
 export function tokenize(stream: string){
